@@ -11,7 +11,6 @@ O app utiliza uma arquitetura robusta baseada em **SQLite**, garantindo que os d
 * **Gamificação:**
     * 🔥 **Ofensiva (Streak):** Contador de dias consecutivos de uso.
     * ❤️ **Vidas (Freeze Days):** Sistema de proteção de ofensiva (regenera a cada 7 dias de streak).
-    * 🎉 **Celebração:** Animação de confetes ao concluir tarefas ou bater metas.
 * **Métricas Rápidas:** Input otimizado para registrar água, páginas lidas, horas de estudo, etc.
 
 ### 2. 📚 Biblioteca (Gestão de Leitura)
