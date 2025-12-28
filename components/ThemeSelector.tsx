@@ -4,12 +4,12 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme, themes, ThemeType } from '../theme';
 
-const themeList: { id: ThemeType; name: string }[] = [
-    { id: 'ocean', name: 'Ocean Focus' },
-    { id: 'forest', name: 'Forest Zen' },
-    { id: 'dracula', name: 'Dracula' },
-    { id: 'coffee', name: 'Coffee' },
-];
+// Gera a lista de temas dinamicamente a partir do objeto de temas importado.
+const themeList = Object.keys(themes).map(key => ({ 
+    id: key as ThemeType, 
+    // Capitaliza o nome para exibição (ex: 'ocean' -> 'Ocean')
+    name: key.charAt(0).toUpperCase() + key.slice(1) 
+}));
 
 const customColors = ['#FF5733', '#C70039', '#900C3F', '#FFC300', '#DAF7A6', '#33C1FF'];
 

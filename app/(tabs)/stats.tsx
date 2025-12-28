@@ -180,7 +180,7 @@ const StatsScreen = () => {
         </View>
 
         {/* Heatmap de Hábitos */}
-        <Text style={styles.sectionTitle}>Hábitos (Últimos 21 dias)</Text>
+        <Text style={styles.sectionTitle}>Hábitos (Últimos 7 dias)</Text>
         <View style={styles.chartCard}>
             {habits.length > 0 ? (
                 habits.map(habit => (

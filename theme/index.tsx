@@ -1,7 +1,7 @@
 ﻿import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { getDB } from '../database';
 
-export type ThemeType = 'ocean' | 'forest' | 'dracula' | 'coffee' | 'custom';
+export type ThemeType = 'ocean' | 'forest' | 'dracula' | 'coffee' | 'princess' | 'custom';
 
 export interface ColorPalette {
     background: string;
@@ -18,6 +18,7 @@ export const themes: Record<string, ColorPalette> = {
     forest: { background: '#F2F5F1', card: '#FFFFFF', text: '#1A3C24', textSecondary: '#5C7C64', primary: '#2D5A3F', accent: '#84B59F', border: '#DDE5DF' },
     dracula: { background: '#282A36', card: '#44475A', text: '#F8F8F2', textSecondary: '#BFBFBF', primary: '#BD93F9', accent: '#50FA7B', border: '#6272A4' },
     coffee: { background: '#F5F0EB', card: '#FFFFFF', text: '#4B3832', textSecondary: '#857067', primary: '#8C6B5D', accent: '#D4A373', border: '#E6DDD7' },
+    princess: { background: '#FFF0F3', card: '#FFFFFF', text: '#8E5D67', textSecondary: '#BFA0A6', primary: '#D48498', accent: '#D48498', border: '#F2D5DA' },
 };
 
 // Helper para gerar paleta rápida (caso o usuário use o seletor simples)
