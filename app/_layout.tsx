@@ -1,31 +1,69 @@
-import React, { useEffect } from 'react';
-import { Slot } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { View } from 'react-native';
-
-// Seus Contextos e Banco de Dados
-import { AppProvider } from '../context/AppContext';
+import { AppDataProvider } from '../context/AppDataContext';
+import 'react-native-get-random-values';
+import React, { useEffect, useState } from 'react';
+import { Stack } from 'expo-router';
+import { useTheme } from '../theme';
 import { ThemeProvider } from '../theme';
+import { UserProvider } from '../context/UserContext';
 import { initDatabase } from '../database';
+import LoadingScreen from '../components/LoadingScreen';
 
-export default function RootLayout() {
-  useEffect(() => {
-    // Inicializa o SQLite ao abrir o app
-    initDatabase();
-  }, []);
+function RootStack() {
+  const { theme } = useTheme();
 
   return (
-    <AppProvider>
+    <Stack
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: theme.card,
+        },
+        headerTintColor: theme.text,
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+        headerBackTitleVisible: false,
+        headerShadowVisible: false,
+      }}
+    >
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="settings" options={{ headerShown: false }} />
+      <Stack.Screen name="daily-detail" options={{ headerShown: false }} />
+      <Stack.Screen name="quests" options={{ title: 'Missões' }} />
+
+      <Stack.Screen name="weekly-view" options={{ title: 'Visão Semanal' }} />
+    </Stack>
+  );
+}
+
+export default function RootLayout() {
+  const [dbReady, setDbReady] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    const setup = async () => {
+      try {
+        await initDatabase();
+        setDbReady(true);
+      } catch (e) {
+        setError(e as Error);
+        console.error("Failed to initialize database", e);
+      }
+    };
+    setup();
+  }, []);
+
+  if (!dbReady) {
+    // A loading screen component would be ideal here
+    return <LoadingScreen message={error ? `Error: ${error.message}`: "Initializing database..."} theme={{background: '#121212', text: '#fff'}} />;
+  }
+
+  return (
+    <UserProvider>
       <ThemeProvider>
-        <View style={{ flex: 1 }}>
-          <StatusBar style="auto" />
-          {/* O Slot é crucial! Ele diz: "Renderize a rota atual aqui".
-            Se você estiver em /dashboard, ele renderiza (tabs).
-            Se estiver em /planner, renderiza o arquivo planner.
-          */}
-          <Slot />
-        </View>
+        <AppDataProvider>
+          <RootStack />
+        </AppDataProvider>
       </ThemeProvider>
-    </AppProvider>
+    </UserProvider>
   );
 }

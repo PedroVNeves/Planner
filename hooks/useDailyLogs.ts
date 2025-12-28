@@ -1,39 +1,68 @@
-import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, DocumentData } from 'firebase/firestore';
-import { useAppContext } from '../context/AppContext';
 
-// Tipagem para os logs (pode expandir depois)
+// hooks/useDailyLogs.ts
+import { useState, useEffect, useCallback } from 'react';
+import { getDB } from '../database';
+import { DailyLog } from '../types';
+import { useGamification } from './useGamification'; // Import useGamification
+
+const db = getDB();
+
 type DailyLogsMap = {
-  [date: string]: DocumentData;
+  [date: string]: DailyLog;
 };
 
 export const useDailyLogs = () => {
-  const { db, user } = useAppContext();
   const [dailyLogs, setDailyLogs] = useState<DailyLogsMap>({});
   const [loadingLogs, setLoadingLogs] = useState(true);
+  const { onTaskCompleted } = useGamification(); // Use onTaskCompleted
+
+  const fetchDailyLogs = useCallback(async () => {
+    try {
+      setLoadingLogs(true);
+      const allRows = await db.getAllAsync<DailyLog>('SELECT * FROM daily_logs');
+      const logsMap: DailyLogsMap = {};
+      allRows.forEach(row => {
+        logsMap[row.date] = row;
+      });
+      setDailyLogs(logsMap);
+    } catch (error) {
+      console.error('Error fetching daily logs from SQLite:', error);
+    } finally {
+      setLoadingLogs(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!user) return; // Aguarda o utilizador
+    fetchDailyLogs();
+  }, [fetchDailyLogs]);
 
-    const appId = 'study-planner-pro'; // (Do seu código original)
-    const logsPath = `artifacts/${appId}/users/${user.uid}/daily_logs`;
-    const q = query(collection(db, logsPath));
+  const updateDailyLog = async (date: string, updates: Partial<Omit<DailyLog, 'date'>>) => {
+    try {
+      const existing = await db.getFirstAsync<DailyLog>('SELECT * FROM daily_logs WHERE date = ?', [date]);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedLogs: DailyLogsMap = {};
-      snapshot.forEach((doc) => {
-        fetchedLogs[doc.id] = doc.data(); // Usa a data (doc.id) como chave
-      });
-      setDailyLogs(fetchedLogs);
-      setLoadingLogs(false);
-    }, (error) => {
-      console.error("Erro ao 'ouvir' daily_logs:", error);
-      setLoadingLogs(false);
-    });
+      if (existing) {
+        const updatedLog = { ...existing, ...updates };
+        await db.runAsync(
+          'UPDATE daily_logs SET focus = ?, metrics = ? WHERE date = ?',
+          [updatedLog.focus, updatedLog.metrics, date]
+        );
+      } else {
+        await db.runAsync(
+          'INSERT INTO daily_logs (date, focus, metrics) VALUES (?, ?, ?)',
+          [date, updates.focus ?? '', updates.metrics ?? '{}']
+        );
+      }
+      fetchDailyLogs();
+      
+      // If metrics were updated, there was an interaction, so update the streak
+      if(updates.metrics) {
+        await onTaskCompleted();
+      }
 
-    // Limpa o 'listener' ao desmontar
-    return () => unsubscribe();
-  }, [user, db]);
+    } catch (error)      {
+      console.error('Error updating daily log:', error);
+    }
+  }
 
-  return { dailyLogs, loadingLogs };
+  return { dailyLogs, loadingLogs, updateDailyLog, refreshDailyLogs: fetchDailyLogs };
 };

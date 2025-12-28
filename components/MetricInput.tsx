@@ -19,7 +19,7 @@ export const MetricInput: React.FC<MetricInputProps> = ({ metricId, name, unit, 
 
     const handleAdd = () => {
         const amount = parseFloat(value);
-        if (!isNaN(amount) && amount > 0) {
+        if (!isNaN(amount) && amount >= 0) {
             onAdd(amount);
             setValue('');
             setIsExpanded(false);

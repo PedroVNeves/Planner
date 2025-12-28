@@ -65,17 +65,16 @@ export default function CustomizeThemeScreen() {
     setLoading(true);
     try {
       // 1. Salva o tema no contexto e banco
-      setCustomTheme(customColors);
+      await setCustomTheme(customColors);
       
-      // 2. Exibe o alerta solicitado
+      // 2. Exibe o alerta de sucesso e redireciona
       Alert.alert(
-        "Tema Definido",
-        "Reinicie o app para garantir que todas as alterações sejam aplicadas corretamente.",
+        "Sucesso!",
+        "O seu tema personalizado foi salvo.",
         [
           { 
             text: "OK", 
             onPress: () => {
-                // 3. Redireciona para a Home após o OK
                 router.replace('/(tabs)/dashboard');
             } 
           }
@@ -95,15 +94,6 @@ export default function CustomizeThemeScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-      
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Feather name="arrow-left" size={24} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Personalizar Tema</Text>
-      </View>
-
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.content}>
             <Text style={styles.subtitle}>

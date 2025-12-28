@@ -1,20 +1,11 @@
-import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, DocumentData, Timestamp } from 'firebase/firestore';
-import { useAppContext } from '../context/AppContext';
 
-// Tipagem para uma Meta
-export type GoalType = 'YEAR' | 'MONTH' | 'WEEK';
+// hooks/useGoals.ts
+import { useState, useEffect, useCallback } from 'react';
+import { getDB } from '../database';
+import { Goal, GoalType } from '../types';
 
-export interface Goal {
-  id: string;
-  type: GoalType;
-  description: string;
-  completed: boolean;
-  createdAt: Timestamp;
-  completedAt?: Timestamp;
-}
+const db = getDB();
 
-// Ordem de prioridade para ordenar
 const typeOrder: Record<GoalType, number> = {
   'YEAR': 1,
   'MONTH': 2,
@@ -22,38 +13,68 @@ const typeOrder: Record<GoalType, number> = {
 };
 
 export const useGoals = () => {
-  const { db, user } = useAppContext();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loadingGoals, setLoadingGoals] = useState(true);
 
-  useEffect(() => {
-    if (!user) return; // Aguarda o utilizador
-
-    const appId = 'study-planner-pro'; // (Do seu código original)
-    const goalsPath = `artifacts/${appId}/users/${user.uid}/goals`;
-    const q = query(collection(db, goalsPath));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedGoals = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      } as Goal));
+  const fetchGoals = useCallback(async () => {
+    try {
+      setLoadingGoals(true);
+      const allRows = await db.getAllAsync<Goal>('SELECT * FROM goals');
       
-      // Ordena as metas (do seu código original)
-      fetchedGoals.sort((a, b) => {
-        return typeOrder[a.type] - typeOrder[b.type];
-      });
+      allRows.sort((a, b) => typeOrder[a.type] - typeOrder[b.type]);
 
-      setGoals(fetchedGoals);
+      setGoals(allRows);
+    } catch (error) {
+      console.error('Error fetching goals from SQLite:', error);
+    } finally {
       setLoadingGoals(false);
-    }, (error) => {
-      console.error("Erro ao 'ouvir' goals:", error);
-      setLoadingGoals(false);
-    });
+    }
+  }, []);
 
-    // Limpa o 'listener' ao desmontar
-    return () => unsubscribe();
-  }, [user, db]);
+  useEffect(() => {
+    fetchGoals();
+  }, [fetchGoals]);
 
-  return { goals, loadingGoals };
+  const addGoal = async (description: string, type: GoalType) => {
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    try {
+      await db.runAsync(
+        'INSERT INTO goals (id, description, type, completed, createdAt) VALUES (?, ?, ?, 0, ?)',
+        [id, description, type, createdAt]
+      );
+      fetchGoals(); // Re-fetch
+    } catch (error) {
+      console.error('Error adding goal:', error);
+    }
+  };
+
+  const updateGoal = async (goalId: string, updates: Partial<Goal>) => {
+    try {
+        const existingGoal = goals.find(g => g.id === goalId);
+        if (!existingGoal) return;
+
+        const updatedGoal = { ...existingGoal, ...updates };
+
+        await db.runAsync(
+            `UPDATE goals SET description = ?, completed = ?, completedAt = ? WHERE id = ?`,
+            [updatedGoal.description, updatedGoal.completed ? 1 : 0, updatedGoal.completedAt, goalId]
+        );
+        fetchGoals(); // Re-fetch
+    } catch (error) {
+        console.error('Error updating goal:', error);
+    }
+  };
+
+  const deleteGoal = async (goalId: string) => {
+    try {
+      await db.runAsync('DELETE FROM goals WHERE id = ?', [goalId]);
+      fetchGoals(); // Re-fetch
+    } catch (error) {
+      console.error('Error deleting goal:', error);
+    }
+  };
+
+
+  return { goals, loadingGoals, addGoal, updateGoal, deleteGoal, refreshGoals: fetchGoals };
 };

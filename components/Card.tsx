@@ -2,7 +2,7 @@ import React, { ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, GestureResponderEvent } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 // --- 1. IMPORTAÇÕES ATUALIZADAS ---
-import { useAppContext, ColorPalette } from '../context/AppContext';
+import { useTheme, ColorPalette } from '../theme';
 
 // --- 2. PROPS ATUALIZADAS ---
 type CardProps = {
@@ -16,7 +16,7 @@ type CardProps = {
 const Card: React.FC<CardProps> = ({ title, icon, children, action, theme: propTheme }) => {
   // --- 3. LÓGICA DO TEMA ---
   // Se um tema não for passado, usa o tema global do contexto
-  const { theme: contextTheme } = useAppContext();
+  const { theme: contextTheme } = useTheme();
   const theme = propTheme || contextTheme;
 
   // Gera estilos dinâmicos

@@ -1,0 +1,163 @@
+
+import React, { useState, useMemo } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, FlatList, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Stack } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
+
+import { useTheme } from '../../theme';
+import { useAppData } from '../../context/AppDataContext';
+import { addHabitTemplate, updateHabitTemplate, archiveHabitTemplate } from '../../database/habits';
+import LoadingScreen from '../../components/LoadingScreen';
+import HabitForm from '../../components/HabitForm';
+
+type Habit = {
+  id: string;
+  title: string;
+};
+
+const HabitsScreen = () => {
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
+  const { habits, loading, refreshAllData } = useAppData();
+  
+  const [isFormVisible, setIsFormVisible] = useState(false);
+  const [selectedHabit, setSelectedHabit] = useState<Habit | null>(null);
+
+  const styles = useMemo(() => {
+    const c = theme || { background: '#fff', card: '#eee', text: '#000', primary: '#333', border: '#ccc', textSecondary: '#666' } as any;
+    return StyleSheet.create({
+      pageContainer: { flex: 1, backgroundColor: c.background },
+      headerContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        marginBottom: 20,
+      },
+      pageTitle: { fontSize: 28, fontWeight: 'bold', color: c.text },
+      addButton: {
+        backgroundColor: c.primary,
+        padding: 10,
+        borderRadius: 50,
+      },
+      habitItem: {
+        backgroundColor: c.card,
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: c.border,
+        marginBottom: 12,
+        marginHorizontal: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      },
+      habitTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: c.text,
+        flex: 1,
+      },
+      habitActions: {
+        flexDirection: 'row',
+      },
+      actionButton: {
+        padding: 8,
+        marginLeft: 8,
+      },
+      emptyText: {
+        textAlign: 'center',
+        marginTop: 40,
+        color: c.textSecondary,
+        fontStyle: 'italic',
+      },
+    });
+  }, [theme]);
+
+  const handleAddHabit = async (title: string) => {
+    await addHabitTemplate(title);
+    setIsFormVisible(false);
+    refreshAllData();
+  };
+
+  const handleUpdateHabit = async (title: string) => {
+    if (selectedHabit) {
+      await updateHabitTemplate(selectedHabit.id, title);
+      setIsFormVisible(false);
+      setSelectedHabit(null);
+      refreshAllData();
+    }
+  };
+
+  const handleArchiveHabit = (id: string) => {
+    Alert.alert(
+      "Arquivar Hábito",
+      "Tem certeza que deseja arquivar este hábito? Ele não poderá ser recuperado.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Arquivar", style: "destructive", onPress: async () => {
+          await archiveHabitTemplate(id);
+          refreshAllData();
+        }}
+      ]
+    );
+  };
+
+  const openForm = (habit: Habit | null = null) => {
+    setSelectedHabit(habit);
+    setIsFormVisible(true);
+  };
+
+  if (loading || !theme) {
+    return <LoadingScreen message="Carregando hábitos..." theme={theme} />;
+  }
+
+  return (
+    <>
+      <Stack.Screen options={{ title: 'Hábitos', headerShown: false }} />
+      <View style={[styles.pageContainer, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.headerContainer}>
+          <Text style={styles.pageTitle}>Gerenciar Hábitos</Text>
+          <TouchableOpacity style={styles.addButton} onPress={() => openForm()}>
+            <Feather name="plus" size={24} color={theme.card} />
+          </TouchableOpacity>
+        </View>
+        <FlatList
+          data={habits}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <View style={styles.habitItem}>
+              <Text style={styles.habitTitle}>{item.title}</Text>
+              <View style={styles.habitActions}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => openForm(item)}>
+                  <Feather name="edit" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleArchiveHabit(item.id)}>
+                  <Feather name="archive" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>Nenhum hábito encontrado. Adicione um novo!</Text>
+          }
+          contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+        />
+        {isFormVisible && (
+          <HabitForm
+            visible={isFormVisible}
+            onClose={() => {
+              setIsFormVisible(false);
+              setSelectedHabit(null);
+            }}
+            onSubmit={selectedHabit ? handleUpdateHabit : handleAddHabit}
+            initialTitle={selectedHabit?.title}
+          />
+        )}
+      </View>
+    </>
+  );
+};
+
+export default HabitsScreen;
