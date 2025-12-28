@@ -53,18 +53,7 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* 2. Métricas */}
-      <Tabs.Screen
-        name="metrics"
-        options={{
-          title: 'Métricas',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="pulse" color={color} size={size} />
-          ),
-        }}
-      />
-
-      {/* 3. Metas */}
+      {/* 2. Metas */}
       <Tabs.Screen
         name="goals"
         options={{
@@ -75,7 +64,7 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* 4. Home (Centro - Destaque) */}
+      {/* 3. Home (Centro - Destaque) */}
       <Tabs.Screen
         name="dashboard"
         options={{
@@ -90,18 +79,7 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* 5. Hábitos */}
-      <Tabs.Screen
-        name="habits"
-        options={{
-          title: 'Hábitos',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="checkmark-circle" color={color} size={size} />
-          ),
-        }}
-      />
-
-      {/* 6. Biblioteca */}
+      {/* 4. Biblioteca */}
       <Tabs.Screen
         name="library"
         options={{
@@ -112,7 +90,7 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* 7. Perfil */}
+      {/* 5. Perfil */}
       <Tabs.Screen
         name="profile"
         options={{

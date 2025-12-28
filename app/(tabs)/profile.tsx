@@ -122,6 +122,8 @@ const ProfileScreen = () => {
         <Text style={styles.sectionTitle}>Conta e Personalização</Text>
         <SettingsButton icon="edit-3" label="Alterar Nome" onPress={() => router.push('/settings/edit-name')} colors={theme} />
         <SettingsButton icon="award" label="Ver Missões" onPress={() => router.push('/quests')} colors={theme} />
+        <SettingsButton icon="check-square" label="Gerir Hábitos" onPress={() => router.push('/settings/manage-habits')} colors={theme} />
+        <SettingsButton icon="bar-chart-2" label="Gerir Métricas" onPress={() => router.push('/settings/manage-metrics')} colors={theme} />
         <SettingsButton icon="edit" label="Personalizar Tema" onPress={() => router.push('/settings/customize-theme')} colors={theme} />
       </View>
       

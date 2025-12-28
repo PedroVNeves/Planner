@@ -106,6 +106,7 @@ export default function CustomizeThemeScreen() {
             <ThemeOption label="Forest Zen" icon="wind" isSelected={themeName === 'forest'} onPress={() => applyPreset('forest')} colors={theme} />
             <ThemeOption label="Dracula" icon="moon" isSelected={themeName === 'dracula'} onPress={() => applyPreset('dracula')} colors={theme} />
             <ThemeOption label="Coffee" icon="coffee" isSelected={themeName === 'coffee'} onPress={() => applyPreset('coffee')} colors={theme} />
+            <ThemeOption label="Princess" icon="gift" isSelected={themeName === 'princess'} onPress={() => applyPreset('princess')} colors={theme} />
             </View>
 
             <Text style={styles.sectionTitle}>Edição Manual</Text>
