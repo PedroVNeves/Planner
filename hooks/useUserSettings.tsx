@@ -1,85 +1,79 @@
+// hooks/useUserSettings.tsx
 import { useState, useEffect, useCallback } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { useAppContext } from '../context/AppContext';
-import { Feather } from '@expo/vector-icons'; // <-- 1. ADICIONE ESTA IMPORTAÇÃO
+import { getDB } from '../database';
+import { UserSettings, MetricConfig } from '../types';
+import { Feather } from '@expo/vector-icons';
 
-// --- A lista de TODAS as métricas disponíveis no seu app ---
+const db = getDB();
 
-// 2. Defina o tipo de configuração da métrica (com o tipo de ícone correto)
-export interface MetricConfig {
-  key: string;
-  label: string;
-  icon: React.ComponentProps<typeof Feather>['name']; // <-- 3. ESTA É A CORREÇÃO
-  unit: string;
-}
-
-// 4. Aplique o tipo ao seu objeto de métricas
-export const ALL_METRICS: { [key: string]: MetricConfig } = {
-  pagesRead: { key: 'pagesRead', label: 'Páginas Lidas', icon: 'book', unit: 'pág' },
-  studyHours: { key: 'studyHours', label: 'Horas de Estudo', icon: 'clock', unit: 'h' },
-  codeTime: { key: 'codeTime', label: 'Tempo de Código', icon: 'code', unit: 'h' },
-  screenTime: { key: 'screenTime', label: 'Tempo de Tela', icon: 'smartphone', unit: 'h' },
-  // Adicione novas métricas aqui no futuro
+// This seems to be static configuration data.
+// For a local-first app, this could be seeded into the DB or kept as a constant.
+export const ALL_METRICS: { [key: string]: Omit<MetricConfig, 'id' | 'target' | 'isVisible'> } = {
+  pagesRead: { name: 'Páginas Lidas', icon: 'book', unit: 'pág' },
+  studyHours: { name: 'Horas de Estudo', icon: 'clock', unit: 'h' },
+  codeTime: { name: 'Tempo de Código', icon: 'code', unit: 'h' },
+  screenTime: { name: 'Tempo de Tela', icon: 'smartphone', unit: 'h' },
 };
 
-// A estrutura das suas definições
-export interface UserSettings {
-  visibleMetrics: string[]; // Um array com as "keys" (ex: ['pagesRead', 'studyHours'])
-}
-
-// O estado inicial (default) para novos utilizadores
+// Default settings for a new user
 const defaultSettings: UserSettings = {
-  visibleMetrics: ['pagesRead', 'studyHours'], // Por defeito, só estas duas aparecem
+    id: 'user',
+    current_streak: 0,
+    last_completed_date: null,
+    freeze_days: 3,
+    current_theme: 'ocean'
 };
 
 export const useUserSettings = () => {
-  const { db, user } = useAppContext();
   const [settings, setSettings] = useState<UserSettings>(defaultSettings);
   const [loading, setLoading] = useState(true);
 
-  // O caminho para o documento ÚNICO de definições
-  const getSettingsDocPath = useCallback(() => {
-    if (!user) return null;
-    return `artifacts/study-planner-pro/users/${user.uid}/settings/user_settings`;
-  }, [user]);
-
-  // Efeito para carregar as definições
-  useEffect(() => {
-    const docPath = getSettingsDocPath();
-    if (!docPath || !db) {
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const docRef = doc(db, docPath);
-
-    getDoc(docRef).then((docSnap) => {
-      if (docSnap.exists()) {
-        setSettings(docSnap.data() as UserSettings);
+  const fetchSettings = useCallback(async () => {
+    try {
+      setLoading(true);
+      const userSettings = await db.getFirstAsync<UserSettings>(
+        "SELECT * FROM user_stats WHERE id = 'user'"
+      );
+      
+      if (userSettings) {
+        setSettings(userSettings);
       } else {
+        // If no settings, maybe create them? The DB init script does this.
         setSettings(defaultSettings);
       }
+    } catch (error) {
+      console.error('Error fetching user settings:', error);
+    } finally {
       setLoading(false);
-    }).catch(e => {
-      console.error("Erro ao carregar definições:", e);
-      setLoading(false);
-    });
-  }, [db, getSettingsDocPath]);
+    }
+  }, []);
 
-  // Função para salvar as definições
-  const saveSettings = async (newSettings: UserSettings) => {
-    const docPath = getSettingsDocPath();
-    if (!docPath || !db) return;
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
+  const saveSettings = async (newSettings: Partial<UserSettings>) => {
+    const currentSettings = { ...settings, ...newSettings };
     try {
-      const docRef = doc(db, docPath);
-      await setDoc(docRef, newSettings);
-      setSettings(newSettings);
+      await db.runAsync(
+        `UPDATE user_stats SET 
+          current_streak = ?, 
+          last_completed_date = ?, 
+          freeze_days = ?, 
+          current_theme = ?
+         WHERE id = 'user'`,
+        [
+          currentSettings.current_streak,
+          currentSettings.last_completed_date,
+          currentSettings.freeze_days,
+          currentSettings.current_theme,
+        ]
+      );
+      setSettings(currentSettings);
     } catch (e) {
-      console.error("Erro ao salvar definições:", e);
+      console.error("Error saving settings:", e);
     }
   };
 
-  return { settings, loading, saveSettings };
+  return { settings, loading, saveSettings, refreshSettings: fetchSettings };
 };

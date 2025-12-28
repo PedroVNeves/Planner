@@ -1,4 +1,4 @@
-import { startOfDay, startOfWeek, addDays, format } from 'date-fns';
+import { startOfDay, startOfWeek, addDays, format, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 /**
@@ -7,14 +7,20 @@ import { ptBR } from 'date-fns/locale';
  */
 export const getTodayLocal = (): string => {
   const now = new Date();
-  return format(now, 'yyyy-MM-dd');
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0'); // Meses são 0-indexados
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 /**
  * Formata uma data para YYYY-MM-DD respeitando o horário local.
  */
 export const formatDateLocal = (date: Date): string => {
-  return format(date, 'yyyy-MM-dd');
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0'); // Meses são 0-indexados
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 /**
@@ -30,6 +36,7 @@ export const getStartOfWeekLocal = (date: Date): Date => {
  */
 export const generateWeekDays = (startOfWeekDate: Date) => {
   const days = [];
+  const today = new Date();
   for (let i = 0; i < 7; i++) {
     const day = addDays(startOfWeekDate, i);
     const dateString = format(day, 'yyyy-MM-dd');
@@ -41,6 +48,8 @@ export const generateWeekDays = (startOfWeekDate: Date) => {
     days.push({
       date: dateString,
       dayName: dayName,
+      dayNumber: format(day, 'd'),
+      isToday: isSameDay(day, today),
       originalDate: day,
     });
   }

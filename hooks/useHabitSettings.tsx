@@ -1,86 +1,66 @@
-// Em: hooks/useHabitSettings.tsx
+
+// hooks/useHabitSettings.tsx
 import { useState, useEffect, useCallback } from 'react';
-import {
-  collection,
-  query,
-  onSnapshot,
-  doc,
-  addDoc,
-  deleteDoc,
-  orderBy,
-  serverTimestamp,
-  Timestamp,
-} from 'firebase/firestore';
-import { useAppContext } from '../context/AppContext';
+import { getDB } from '../database';
+import { Habit } from '../types';
 import { Feather } from '@expo/vector-icons';
 
-// A estrutura de um Hábito
-export interface Habit {
-  id: string;
-  name: string;
-  icon: React.ComponentProps<typeof Feather>['name'];
-  createdAt: Timestamp;
-}
+const db = getDB();
 
 export const useHabitSettings = () => {
-  const { db, user } = useAppContext();
   const [habits, setHabits] = useState<Habit[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // O caminho para a coleção de hábitos
-  const getHabitsCollectionPath = useCallback(() => {
-    if (!user) return null;
-    return `artifacts/study-planner-pro/users/${user.uid}/habits`;
-  }, [user]);
-
-  // Efeito para carregar os hábitos em tempo real
-  useEffect(() => {
-    const collectionPath = getHabitsCollectionPath();
-    if (!collectionPath || !db) {
+  const fetchHabits = useCallback(async () => {
+    try {
+      setLoading(true);
+      // The table is habit_templates, but we use the Habit interface
+      const allRows = await db.getAllAsync<Habit>('SELECT id, title, archived, createdAt FROM habit_templates ORDER BY createdAt ASC');
+      setHabits(allRows);
+    } catch (error) {
+      console.error('Error fetching habits from SQLite:', error);
+    } finally {
       setLoading(false);
-      return;
     }
+  }, []);
 
-    setLoading(true);
-    // Ordena os hábitos por data de criação
-    const q = query(collection(db, collectionPath), orderBy('createdAt', 'asc'));
+  useEffect(() => {
+    fetchHabits();
+  }, [fetchHabits]);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedHabits = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      } as Habit));
-      setHabits(fetchedHabits);
-      setLoading(false);
-    }, (error) => {
-      console.error("Erro ao carregar hábitos:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [db, user, getHabitsCollectionPath]);
-
-  // Função para ADICIONAR um novo hábito
   const addHabit = async (name: string, icon: React.ComponentProps<typeof Feather>['name']) => {
-    const collectionPath = getHabitsCollectionPath();
-    if (!collectionPath || !db) return;
-
-    const payload = {
-      name: name,
-      icon: icon,
-      createdAt: serverTimestamp(),
-    };
-    await addDoc(collection(db, collectionPath), payload);
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    try {
+      // Note: The 'icon' is not in the habit_templates table schema you provided.
+      // I am mapping 'name' to 'title'. If you need the icon, you'll have to add an 'icon' column to the table.
+      await db.runAsync(
+        'INSERT INTO habit_templates (id, title, archived, createdAt) VALUES (?, ?, 0, ?)',
+        [id, name, createdAt]
+      );
+      fetchHabits(); // Re-fetch
+    } catch (error) {
+      console.error('Error adding habit:', error);
+    }
   };
 
-  // Função para APAGAR um hábito
   const deleteHabit = async (habitId: string) => {
-    const collectionPath = getHabitsCollectionPath();
-    if (!collectionPath || !db) return;
-
-    const docRef = doc(db, collectionPath, habitId);
-    await deleteDoc(docRef);
+    try {
+      await db.runAsync('DELETE FROM habit_templates WHERE id = ?', [habitId]);
+      fetchHabits(); // Re-fetch
+    } catch (error) {
+      console.error('Error deleting habit:', error);
+    }
   };
+  
+  const archiveHabit = async (habitId: string) => {
+    try {
+        await db.runAsync('UPDATE habit_templates SET archived = 1 WHERE id = ?', [habitId]);
+        fetchHabits();
+    } catch (error) {
+        console.error('Error archiving habit:', error)
+    }
+  }
 
-  return { habits, loading, addHabit, deleteHabit };
+  return { habits, loading, addHabit, deleteHabit, archiveHabit, refreshHabits: fetchHabits };
 };

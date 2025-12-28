@@ -4,19 +4,15 @@ const db = SQLite.openDatabaseSync('planner.db');
 
 export const getDB = () => db;
 
-export const initDatabase = () => {
+export const initDatabase = async () => {
   try {
-    // 1. Categorias
-    db.execSync(`
+    await db.execAsync(`
+      PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS categories (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         color TEXT
       );
-    `);
-
-    // 2. Tarefas
-    db.execSync(`
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -26,20 +22,19 @@ export const initDatabase = () => {
         type TEXT DEFAULT 'TASK',
         FOREIGN KEY (categoryId) REFERENCES categories (id)
       );
-    `);
-
-    // 3. Templates de Hábitos
-    db.execSync(`
       CREATE TABLE IF NOT EXISTS habit_templates (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         archived INTEGER DEFAULT 0,
         createdAt TEXT
       );
-    `);
-
-    // 4. Metas (Goals)
-    db.execSync(`
+      CREATE TABLE IF NOT EXISTS habit_completions (
+        habit_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        completed INTEGER DEFAULT 0,
+        PRIMARY KEY (habit_id, date),
+        FOREIGN KEY (habit_id) REFERENCES habit_templates (id) ON DELETE CASCADE
+      );
       CREATE TABLE IF NOT EXISTS goals (
         id TEXT PRIMARY KEY,
         description TEXT NOT NULL,
@@ -47,10 +42,6 @@ export const initDatabase = () => {
         completed INTEGER DEFAULT 0,
         createdAt TEXT
       );
-    `);
-
-    // 5. Livros
-    db.execSync(`
       CREATE TABLE IF NOT EXISTS books (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -60,44 +51,65 @@ export const initDatabase = () => {
         status TEXT DEFAULT 'TO_READ',
         rating INTEGER DEFAULT 0
       );
-    `);
-
-    // 6. Logs Diários
-    db.execSync(`
       CREATE TABLE IF NOT EXISTS daily_logs (
         date TEXT PRIMARY KEY,
         focus TEXT,
-        metrics TEXT
+        notes TEXT
       );
-    `);
-
-    // 7. Definições de Métricas (NOVA TABELA)
-    db.execSync(`
       CREATE TABLE IF NOT EXISTS metric_definitions (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        unit TEXT NOT NULL,
-        icon TEXT DEFAULT 'bar-chart',
-        target INTEGER DEFAULT 0,
+        unit TEXT,
+        target REAL,
         isVisible INTEGER DEFAULT 1
       );
-    `);
-
-    // 8. Gamificação
-    db.execSync(`
+      CREATE TABLE IF NOT EXISTS metric_logs (
+        id TEXT PRIMARY KEY,
+        metric_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        value REAL NOT NULL,
+        FOREIGN KEY (metric_id) REFERENCES metric_definitions (id) ON DELETE CASCADE
+      );
       CREATE TABLE IF NOT EXISTS user_stats (
         id TEXT PRIMARY KEY,
         current_streak INTEGER DEFAULT 0,
         last_completed_date TEXT,
         freeze_days INTEGER DEFAULT 0,
-        current_theme TEXT DEFAULT 'ocean'
+        display_name TEXT
       );
     `);
 
-    db.execSync(`INSERT OR IGNORE INTO user_stats (id, current_streak, freeze_days) VALUES ('user', 0, 3)`);
+    // Migration logic
+    try {
+      const dailyLogsInfo = await db.getAllAsync('PRAGMA table_info(daily_logs)');
+      
+      // 1. Ensure 'notes' column exists before attempting migration
+      const notesColumnExists = dailyLogsInfo.some((column: any) => column.name === 'notes');
+      if (!notesColumnExists) {
+        await db.execAsync('ALTER TABLE daily_logs ADD COLUMN notes TEXT');
+      }
+
+      // 2. Now, handle the 'metrics' column migration
+      const metricsColumnExists = dailyLogsInfo.some((column: any) => column.name === 'metrics');
+      if (metricsColumnExists) {
+        console.warn("Dropping 'metrics' column from 'daily_logs' for schema alignment. Old data in this column will be lost.");
+        
+        // The 'notes' column is now guaranteed to exist
+        await db.execAsync(`
+          CREATE TABLE daily_logs_temp AS SELECT date, focus, notes FROM daily_logs;
+          DROP TABLE daily_logs;
+          ALTER TABLE daily_logs_temp RENAME TO daily_logs;
+        `);
+      }
+    } catch (e) {
+      console.warn("Migration for daily_logs failed, proceeding with current schema:", e);
+    }
+
+    await db.execAsync(`INSERT OR IGNORE INTO user_stats (id, current_streak, freeze_days, display_name) VALUES ('user', 0, 3, 'Usuário')`);
 
     console.log('SQLite initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error);
+    throw error; // Re-throw to be caught by the caller
   }
 };

@@ -1,115 +1,102 @@
-// hooks/useBooks.tsx
-import { useState, useEffect, useCallback } from 'react';
-import {
-  collection,
-  query,
-  onSnapshot,
-  doc,
-  setDoc,
-  addDoc,
-  deleteDoc,
-  serverTimestamp,
-  Timestamp,
-  FieldValue,
-} from 'firebase/firestore';
-import { useAppContext } from '../context/AppContext'; // Sobe um nível para a raiz
 
-// 1. A Interface com as correções de tipo que fizemos
-export interface Book {
-  id: string;
-  title: string;
-  author: string;
-  totalPages: number;
-  currentPage: number;
-  status: 'TO_READ' | 'READING' | 'DONE';
-  createdAt: Timestamp | FieldValue;
-  startedAt?: Timestamp | FieldValue | null;
-  finishedAt?: Timestamp | FieldValue | null;
-}
+// hooks/useBooks.ts
+import { useState, useEffect, useCallback } from 'react';
+import { getDB } from '../database';
+import { Book } from '../types'; // Assuming you have a types file, or we define it here.
+
+// If you don't have a central types file, you can define the interface here:
+// export interface Book {
+//   id: string;
+//   title: string;
+//   author: string;
+//   totalPages: number;
+//   currentPage: number;
+//   status: 'TO_READ' | 'READING' | 'DONE';
+//   rating?: number;
+//   startedAt?: string | null;
+//   finishedAt?: string | null;
+// }
+
+const db = getDB();
 
 export const useBooks = () => {
-  const { db, user } = useAppContext();
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Caminho da coleção (centralizado)
-  const getCollectionPath = useCallback(() => {
-    if (!user) return null;
-    return `artifacts/study-planner-pro/users/${user.uid}/books`;
-  }, [user]);
+  const fetchBooks = useCallback(async () => {
+    try {
+      setLoading(true);
+      const allRows = await db.getAllAsync<Book>('SELECT * FROM books ORDER BY status, title');
+      setBooks(allRows);
+    } catch (error) {
+      console.error('Error fetching books from SQLite:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  // Efeito para ouvir os dados (em tempo real)
   useEffect(() => {
-    const collectionPath = getCollectionPath();
-    if (!collectionPath || !db) {
-      setLoading(false);
-      return;
-    }
+    fetchBooks();
+  }, [fetchBooks]);
 
-    setLoading(true);
-    const q = query(collection(db, collectionPath));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedBooks = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      } as Book));
-      
-      // Ordena os livros
-      const sortedBooks = fetchedBooks.sort((a, b) => 
-        a.status.localeCompare(b.status) || a.title.localeCompare(b.title)
+  const addBook = async (newData: Omit<Book, 'id' | 'currentPage' | 'status'>) => {
+    const id = crypto.randomUUID();
+    try {
+      await db.runAsync(
+        'INSERT INTO books (id, title, author, totalPages) VALUES (?, ?, ?, ?)',
+        [id, newData.title, newData.author, newData.totalPages]
       );
-      setBooks(sortedBooks);
-      setLoading(false);
-    }, (error) => {
-      console.error("Erro ao ouvir livros (useBooks):", error);
-      setLoading(false);
-    });
-
-    // Limpa o listener ao sair
-    return () => unsubscribe();
-  }, [db, user, getCollectionPath]);
-
-  // Função para ADICIONAR
-  const addBook = async (newData: Omit<Book, 'id' | 'createdAt' | 'status' | 'currentPage'>) => {
-    const collectionPath = getCollectionPath();
-    if (!collectionPath || !db) return;
-
-    const bookPayload: Omit<Book, 'id'> = {
-      ...newData,
-      currentPage: 0,
-      status: 'TO_READ',
-      createdAt: serverTimestamp(),
-    };
-    await addDoc(collection(db, collectionPath), bookPayload);
+      fetchBooks(); // Re-fetch to update the list
+    } catch (error) {
+      console.error('Error adding book:', error);
+    }
   };
 
-  // Função para ATUALIZAR
   const updateBook = async (bookId: string, updates: Partial<Book>) => {
-    const collectionPath = getCollectionPath();
-    if (!collectionPath || !db) return;
+    try {
+      // Logic for setting start and finish dates
+      if (updates.status === 'READING' && !updates.startedAt) {
+        updates.startedAt = new Date().toISOString();
+      }
+      if (updates.status === 'DONE' && !updates.finishedAt) {
+        updates.finishedAt = new Date().toISOString();
+      }
+      
+      const existingBook = books.find(b => b.id === bookId);
+      if (!existingBook) return;
 
-    const docRef = doc(db, collectionPath, bookId);
-    
-    // Lógica de datas (do seu código original)
-    if (updates.status === 'DONE' && !updates.finishedAt) {
-      updates.finishedAt = serverTimestamp();
+      const updatedBook = { ...existingBook, ...updates };
+
+      await db.runAsync(
+        `UPDATE books 
+         SET title = ?, author = ?, totalPages = ?, currentPage = ?, status = ?, rating = ?, startedAt = ?, finishedAt = ?
+         WHERE id = ?`,
+        [
+          updatedBook.title,
+          updatedBook.author,
+          updatedBook.totalPages,
+          updatedBook.currentPage,
+          updatedBook.status,
+          updatedBook.rating ?? 0,
+          updatedBook.startedAt,
+          updatedBook.finishedAt,
+          bookId,
+        ]
+      );
+      fetchBooks(); // Re-fetch to update the list
+    } catch (error) {
+      console.error('Error updating book:', error);
     }
-    if (updates.status === 'READING' && !updates.startedAt) {
-      updates.startedAt = serverTimestamp();
-    }
-    
-    await setDoc(docRef, updates, { merge: true });
   };
 
-  // Função para APAGAR
   const deleteBook = async (bookId: string) => {
-    const collectionPath = getCollectionPath();
-    if (!collectionPath || !db) return;
-
-    const docRef = doc(db, collectionPath, bookId);
-    await deleteDoc(docRef);
+    try {
+      await db.runAsync('DELETE FROM books WHERE id = ?', [bookId]);
+      fetchBooks(); // Re-fetch to update the list
+    } catch (error) {
+      console.error('Error deleting book:', error);
+    }
   };
 
-  return { books, loading, addBook, updateBook, deleteBook };
+  return { books, loading, addBook, updateBook, deleteBook, refreshBooks: fetchBooks };
 };

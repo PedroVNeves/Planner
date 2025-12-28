@@ -83,10 +83,10 @@ const GoalsScreen = () => {
   }, [theme]);
 
   // --- LER METAS ---
-  const loadGoals = useCallback(() => {
+  const loadGoals = useCallback(async () => {
     try {
         const db = getDB();
-        const result = db.getAllSync('SELECT * FROM goals ORDER BY createdAt DESC');
+        const result = await db.getAllAsync('SELECT * FROM goals ORDER BY createdAt DESC');
         setGoals(result);
     } catch (e) { 
         console.error("Erro ao carregar metas:", e); 
@@ -98,7 +98,7 @@ const GoalsScreen = () => {
   useFocusEffect(useCallback(() => { loadGoals(); }, [loadGoals]));
 
   // --- ADICIONAR META ---
-  const handleAddGoal = () => {
+  const handleAddGoal = async () => {
     if (!newDescription.trim()) return;
     
     setWriting(true);
@@ -107,15 +107,14 @@ const GoalsScreen = () => {
       const id = Crypto.randomUUID();
       const now = new Date().toISOString();
       
-      // Uso de runSync para garantir gravação imediata
-      db.runSync(
+      await db.runAsync(
         'INSERT INTO goals (id, description, type, completed, createdAt) VALUES (?, ?, ?, ?, ?)', 
         [id, newDescription.trim(), newType, 0, now]
       );
       
       setNewDescription('');
       Keyboard.dismiss();
-      loadGoals();
+      await loadGoals();
       
     } catch (e) { 
         console.error("Erro ao adicionar meta:", e); 
@@ -125,21 +124,21 @@ const GoalsScreen = () => {
   };
 
   // --- ALTERAR STATUS ---
-  const handleToggleGoal = (goal: any) => {
+  const handleToggleGoal = async (goal: any) => {
     try {
         const db = getDB();
         const newStatus = goal.completed ? 0 : 1;
-        db.runSync('UPDATE goals SET completed = ? WHERE id = ?', [newStatus, goal.id]);
-        loadGoals();
+        await db.runAsync('UPDATE goals SET completed = ? WHERE id = ?', [newStatus, goal.id]);
+        await loadGoals();
     } catch (e) { console.error("Erro ao atualizar meta:", e); }
   };
   
   // --- DELETAR META ---
-  const handleDeleteGoal = (goalId: string) => {
+  const handleDeleteGoal = async (goalId: string) => {
     try {
         const db = getDB();
-        db.runSync('DELETE FROM goals WHERE id = ?', [goalId]);
-        loadGoals();
+        await db.runAsync('DELETE FROM goals WHERE id = ?', [goalId]);
+        await loadGoals();
     } catch (e) { console.error("Erro ao deletar meta:", e); }
   };
 

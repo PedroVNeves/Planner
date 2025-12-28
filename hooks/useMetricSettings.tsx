@@ -15,11 +15,11 @@ export const useMetricSettings = () => {
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadMetrics = useCallback(() => {
+  const loadMetrics = useCallback(async () => {
     const db = getDB();
     try {
       // Converte 0/1 do SQLite para boolean
-      const result = db.getAllSync('SELECT * FROM metric_definitions');
+      const result = await db.getAllAsync('SELECT * FROM metric_definitions');
       const parsedMetrics = result.map((m: any) => ({
         ...m,
         isVisible: m.isVisible === 1

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -16,11 +16,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 
-import { useAppContext } from '../../context/AppContext';
 import { useTheme } from '../../theme';
 import { useMetricSettings } from '../../hooks/useMetricSettings';
+import { useAppData } from '../../context/AppDataContext';
 import { getDB } from '../../database';
-import { useGamification } from '../../hooks/useGamification';
 
 import { MetricInput } from '../../components/MetricInput';
 import Card from '../../components/Card';
@@ -33,109 +32,57 @@ const DailyDetailScreen = () => {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { metrics } = useMetricSettings();
-  const { onTaskCompleted } = useGamification();
 
-  const [loading, setLoading] = useState(true);
+  // Use Global State
+  const { 
+    metricLogs, 
+    habits, 
+    completions, 
+    loading, 
+    updateMetricAndUpdate, 
+    toggleHabitAndUpdate 
+  } = useAppData();
+
   const [focus, setFocus] = useState('');
-  const [dailyMetrics, setDailyMetrics] = useState<Record<string, number>>({});
-  
-  const [habits, setHabits] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
-  
   const [newTaskTitle, setNewTaskTitle] = useState('');
 
-  // 🛡️ Estilos Blindados
-  const styles = useMemo(() => {
-    const c = theme || { background: '#fff', card: '#eee', text: '#000', primary: '#333', border: '#ccc', textSecondary: '#666', accent: '#0f0' } as any;
-    return StyleSheet.create({
-        container: { flex: 1, backgroundColor: c.background },
-        content: { padding: 16, paddingBottom: 100 },
-        
-        sectionTitle: { fontSize: 18, fontWeight: 'bold', color: c.text, marginBottom: 12, marginTop: 24 },
-        
-        // Foco
-        focusContainer: { backgroundColor: c.card, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: c.border },
-        focusLabel: { fontSize: 12, fontWeight: '700', color: c.primary, textTransform: 'uppercase', marginBottom: 8 },
-        focusInput: { fontSize: 18, color: c.text, fontWeight: '600', minHeight: 40 },
-        
-        // Input de Tarefa
-        taskInputContainer: { flexDirection: 'row', marginBottom: 16 },
-        taskInput: { flex: 1, backgroundColor: c.card, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: c.border, color: c.text, marginRight: 8 },
-        addButton: { backgroundColor: c.primary, padding: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-        
-        // Item de Lista
-        taskItem: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: c.card, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: c.border },
-        taskText: { flex: 1, marginLeft: 12, fontSize: 16, color: c.text },
-        taskCompleted: { textDecorationLine: 'line-through', color: c.textSecondary, opacity: 0.6 },
-        
-        emptyText: { color: c.textSecondary, fontStyle: 'italic', textAlign: 'center', marginTop: 10 },
+  // Get metrics for the specific day from global state
+  const dailyMetrics = useMemo(() => {
+    const todaysMetrics: Record<string, number> = {};
+    metricLogs.filter(log => log.date === dateString).forEach(log => {
+      todaysMetrics[log.metric_id] = log.value;
     });
-  }, [theme]);
+    return todaysMetrics;
+  }, [metricLogs, dateString]);
 
-  const loadData = useCallback(() => {
+  // Load focus and non-habit tasks from DB for this specific day
+  const loadScreenData = useCallback(async () => {
     const db = getDB();
     try {
-        // 1. GERAÇÃO DE HÁBITOS (Se for um dia novo)
-        // Verifica se já existem tarefas do tipo 'HABIT' para este dia
-        const existingHabits = db.getFirstSync(`SELECT count(*) as count FROM tasks WHERE date = ? AND type = 'HABIT'`, [dateString]) as { count: number };
-        
-        if (existingHabits.count === 0) {
-            // Copia templates ativos para o dia atual
-            const templates = db.getAllSync(`SELECT * FROM habit_templates WHERE archived = 0`);
-            templates.forEach((tpl: any) => {
-                const id = Crypto.randomUUID();
-                db.runSync(
-                    `INSERT INTO tasks (id, title, completed, date, type) VALUES (?, ?, 0, ?, 'HABIT')`, 
-                    [id, tpl.title, dateString]
-                );
-            });
-        }
-
-        // 2. Carregar Logs (Foco e Métricas)
-        let log = db.getFirstSync('SELECT * FROM daily_logs WHERE date = ?', [dateString]) as any;
-        if (!log) {
-            setFocus('');
-            setDailyMetrics({});
-        } else {
-            setFocus(log.focus || '');
-            setDailyMetrics(log.metrics ? JSON.parse(log.metrics) : {});
-        }
-
-        // 3. Carregar Todas as Tarefas e Separar
-        const allTasks = db.getAllSync('SELECT * FROM tasks WHERE date = ?', [dateString]);
-        setHabits(allTasks.filter((t: any) => t.type === 'HABIT'));
-        setTasks(allTasks.filter((t: any) => t.type !== 'HABIT'));
-
-    } catch (e) { console.error("Erro carregar dia:", e); } 
-    finally { setLoading(false); }
+      // Load Focus
+      const log = await db.getFirstAsync('SELECT focus FROM daily_logs WHERE date = ?', [dateString]) as any;
+      if (log) {
+        setFocus(log.focus || '');
+      }
+      // Load one-off tasks
+      const allTasks = await db.getAllAsync("SELECT * FROM tasks WHERE date = ? AND type = 'TASK'", [dateString]);
+      setTasks(allTasks);
+    } catch(e) {
+      console.error("Error loading daily detail screen data:", e);
+    }
   }, [dateString]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadScreenData();
+  }, [loadScreenData]);
+
 
   // --- SALVAR FOCO ---
   const saveFocus = async () => {
     try {
         const db = getDB();
-        await db.runAsync(`INSERT OR IGNORE INTO daily_logs (date, metrics, focus) VALUES (?, '{}', '')`, [dateString]);
-        await db.runAsync('UPDATE daily_logs SET focus = ? WHERE date = ?', [focus, dateString]);
-    } catch (e) { console.error(e); }
-  };
-
-  // --- ATUALIZAR MÉTRICA (Substituir Valor) ---
-  const handleUpdateMetric = async (metricId: string, newValue: number) => {
-    Vibration.vibrate(50); // Feedback tátil leve
-    
-    // Lógica de SUBSTITUIÇÃO (valor exato que o usuário digitou)
-    const newMetrics = { ...dailyMetrics, [metricId]: newValue };
-    setDailyMetrics(newMetrics);
-
-    try {
-        const db = getDB();
-        await db.runAsync(`INSERT OR IGNORE INTO daily_logs (date, metrics, focus) VALUES (?, '{}', '')`, [dateString]);
-        await db.runAsync('UPDATE daily_logs SET metrics = ? WHERE date = ?', [JSON.stringify(newMetrics), dateString]);
-        
-        // Gamificação: Ganha XP/Streak por interagir
-        onTaskCompleted();
+        await db.runAsync(`INSERT INTO daily_logs (date, focus) VALUES (?, ?) ON CONFLICT(date) DO UPDATE SET focus = excluded.focus`, [dateString, focus]);
     } catch (e) { console.error(e); }
   };
 
@@ -145,16 +92,15 @@ const DailyDetailScreen = () => {
     try {
         const db = getDB();
         const id = Crypto.randomUUID();
-        // Salva como 'TASK' (Tarefa Avulsa)
         await db.runAsync(`INSERT INTO tasks (id, title, completed, date, type) VALUES (?, ?, 0, ?, 'TASK')`, [id, newTaskTitle, dateString]);
         setNewTaskTitle('');
         Keyboard.dismiss();
-        loadData();
+        await loadScreenData(); // Reload only screen-specific data
     } catch (e) { console.error(e); }
   };
 
-  // --- ALTERAR STATUS ---
-  const toggleTask = async (task: any) => {
+  // --- ALTERAR STATUS DA TAREFA AVULSA ---
+  const toggleOneOffTask = async (task: any) => {
     try {
         const db = getDB();
         const newStatus = task.completed ? 0 : 1;
@@ -162,9 +108,8 @@ const DailyDetailScreen = () => {
         
         if (newStatus === 1) {
             Vibration.vibrate(50);
-            onTaskCompleted();
         }
-        loadData();
+        await loadScreenData();
     } catch (e) { console.error(e); }
   };
 
@@ -173,9 +118,39 @@ const DailyDetailScreen = () => {
     try {
         const db = getDB();
         await db.runAsync('DELETE FROM tasks WHERE id = ?', [id]);
-        loadData();
+        await loadScreenData();
     } catch (e) { console.error(e); }
   };
+  
+  // Get completions for this specific day
+  const dailyCompletions = useMemo(() => {
+    const map = new Map<string, boolean>();
+    completions.filter(c => c.date === dateString).forEach(c => {
+      map.set(c.habit_id, c.completed === 1);
+    });
+    return map;
+  }, [completions, dateString]);
+
+
+  // 🛡️ Estilos Blindados (código omitido por brevidade, sem alterações)
+  const styles = useMemo(() => {
+    const c = theme || { background: '#fff', card: '#eee', text: '#000', primary: '#333', border: '#ccc', textSecondary: '#666', accent: '#0f0' } as any;
+    return StyleSheet.create({
+        container: { flex: 1, backgroundColor: c.background },
+        content: { padding: 16, paddingBottom: 100 },
+        sectionTitle: { fontSize: 18, fontWeight: 'bold', color: c.text, marginBottom: 12, marginTop: 24 },
+        focusContainer: { backgroundColor: c.card, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: c.border },
+        focusLabel: { fontSize: 12, fontWeight: '700', color: c.primary, textTransform: 'uppercase', marginBottom: 8 },
+        focusInput: { fontSize: 18, color: c.text, fontWeight: '600', minHeight: 40 },
+        taskInputContainer: { flexDirection: 'row', marginBottom: 16 },
+        taskInput: { flex: 1, backgroundColor: c.card, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: c.border, color: c.text, marginRight: 8 },
+        addButton: { backgroundColor: c.primary, padding: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+        taskItem: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: c.card, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: c.border },
+        taskText: { flex: 1, marginLeft: 12, fontSize: 16, color: c.text },
+        taskCompleted: { textDecorationLine: 'line-through', color: c.textSecondary, opacity: 0.6 },
+        emptyText: { color: c.textSecondary, fontStyle: 'italic', textAlign: 'center', marginTop: 10 },
+    });
+  }, [theme]);
 
   if (loading || !theme) return <LoadingScreen message="Carregando dia..." theme={theme || {background: '#fff'} as any} />;
 
@@ -212,14 +187,17 @@ const DailyDetailScreen = () => {
         {/* Hábitos Diários (Automáticos) */}
         <Text style={styles.sectionTitle}>Hábitos Diários</Text>
         {habits.length > 0 ? (
-            habits.map(habit => (
+            habits.map(habit => {
+              const isCompleted = dailyCompletions.get(habit.id) || false;
+              return (
                 <View key={habit.id} style={styles.taskItem}>
-                    <TouchableOpacity onPress={() => toggleTask(habit)} style={{ marginRight: 12 }}>
-                        <Feather name={habit.completed ? "check-square" : "square"} size={24} color={habit.completed ? theme.accent : theme.textSecondary} />
+                    <TouchableOpacity onPress={() => toggleHabitAndUpdate(habit.id, dateString, !isCompleted)} style={{ marginRight: 12 }}>
+                        <Feather name={isCompleted ? "check-square" : "square"} size={24} color={isCompleted ? theme.accent : theme.textSecondary} />
                     </TouchableOpacity>
-                    <Text style={[styles.taskText, habit.completed && styles.taskCompleted]}>{habit.title}</Text>
+                    <Text style={[styles.taskText, isCompleted && styles.taskCompleted]}>{habit.title}</Text>
                 </View>
-            ))
+              )
+            })
         ) : (
             <Text style={styles.emptyText}>Configure seus hábitos no Perfil.</Text>
         )}
@@ -242,7 +220,7 @@ const DailyDetailScreen = () => {
         {tasks.length > 0 ? (
             tasks.map(task => (
                 <View key={task.id} style={styles.taskItem}>
-                    <TouchableOpacity onPress={() => toggleTask(task)} style={{ marginRight: 12 }}>
+                    <TouchableOpacity onPress={() => toggleOneOffTask(task)} style={{ marginRight: 12 }}>
                         <Feather name={task.completed ? "check-square" : "square"} size={24} color={task.completed ? theme.accent : theme.textSecondary} />
                     </TouchableOpacity>
                     <Text style={[styles.taskText, task.completed && styles.taskCompleted]}>{task.title}</Text>
@@ -266,8 +244,8 @@ const DailyDetailScreen = () => {
                     unit={metric.unit}
                     currentValue={dailyMetrics[metric.id] || 0}
                     target={(metric as any).target || 0}
-                    // Atualiza com o valor exato digitado
-                    onAdd={(amount) => handleUpdateMetric(metric.id, amount)}
+                    // Chama a função correta do contexto
+                    onAdd={(amount) => updateMetricAndUpdate(metric.id, dateString, amount)}
                 />
             ))}
         </Card>

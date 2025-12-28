@@ -11,13 +11,16 @@
     }
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "src",
      "app",
       "context",
-     "types"
+     "types", 
+     "hooks", 
+     "utils", 
+     "theme", 
+     "database",
+     "components"
   ]
 }

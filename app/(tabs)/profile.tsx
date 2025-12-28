@@ -6,7 +6,7 @@ import { Feather } from '@expo/vector-icons';
 
 // Removido: import { signOut } from 'firebase/auth'; 
 
-import { useAppContext } from '../../context/AppContext';
+import { useUser } from '../../context/UserContext';
 import { useTheme } from '../../theme';
 import { useMetricSettings } from '../../hooks/useMetricSettings'; 
 import { getDB } from '../../database';
@@ -35,8 +35,7 @@ const SettingsButton: React.FC<{ icon: any; label: string; onPress: () => void; 
 
 const ProfileScreen = () => {
   const insets = useSafeAreaInsets();
-  // CORREÇÃO: Removemos 'auth' e adicionamos 'setSessionUser'
-  const { user, setSessionUser } = useAppContext(); 
+  const { user } = useUser(); 
   const { theme } = useTheme(); 
   const { metrics } = useMetricSettings();
   
@@ -65,14 +64,14 @@ const ProfileScreen = () => {
   }, [theme]);
 
   // --- LÓGICA DE CÁLCULO SQLITE ---
-  const calculateStats = useCallback(() => {
+  const calculateStats = useCallback(async () => {
     try {
         const db = getDB();
         
-        const logs = db.getAllSync('SELECT * FROM daily_logs');
+        const logs = await db.getAllAsync('SELECT * FROM daily_logs');
         const totalDays = logs.length;
         
-        const tasksResult = db.getFirstSync('SELECT count(*) as count FROM tasks WHERE completed = 1') as { count: number } | null;
+        const tasksResult = await db.getFirstAsync('SELECT count(*) as count FROM tasks WHERE completed = 1') as { count: number } | null;
         
         const metricTotals: Record<string, number> = {};
         logs.forEach((log: any) => {
@@ -104,18 +103,6 @@ const ProfileScreen = () => {
 
   useFocusEffect(useCallback(() => { calculateStats(); }, [calculateStats]));
 
-  const handleSignOut = async () => {
-    // CORREÇÃO: Logout Local
-    try { 
-        if (setSessionUser) {
-            setSessionUser(null); // Limpa o estado global
-            router.replace('/(auth)/login'); // Redireciona
-        }
-    } catch (e) { 
-        Alert.alert("Erro", "Não foi possível sair."); 
-    }
-  };
-
   if (loading || !theme) {
     const safeTheme = theme || { background: '#fff', primary: '#333' } as any;
     return <LoadingScreen message="Carregando perfil..." theme={safeTheme} />;
@@ -134,8 +121,7 @@ const ProfileScreen = () => {
       <View style={styles.settingsSection}>
         <Text style={styles.sectionTitle}>Conta e Personalização</Text>
         <SettingsButton icon="edit-3" label="Alterar Nome" onPress={() => router.push('/settings/edit-name')} colors={theme} />
-        <SettingsButton icon="bar-chart-2" label="Gerir Métricas" onPress={() => router.push('/settings/manage-metrics')} colors={theme} />
-        <SettingsButton icon="check-square" label="Gerir Hábitos" onPress={() => router.push('/settings/manage-habits')} colors={theme} />
+        <SettingsButton icon="award" label="Ver Missões" onPress={() => router.push('/quests')} colors={theme} />
         <SettingsButton icon="edit" label="Personalizar Tema" onPress={() => router.push('/settings/customize-theme')} colors={theme} />
       </View>
       
@@ -154,10 +140,7 @@ const ProfileScreen = () => {
         <StatCard label="Tarefas Concluídas" value={stats.totalTasksDone} unit="tarefas" colors={theme} />
       </View>
 
-      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-        <Feather name="log-out" size={16} color="#ef4444" />
-        <Text style={styles.signOutButtonText}>Sair (Sign Out)</Text>
-      </TouchableOpacity>
+
     </ScrollView>
   );
 };

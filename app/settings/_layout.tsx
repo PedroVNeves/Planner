@@ -1,21 +1,28 @@
-import React, { useEffect } from 'react';
-import { Slot } from 'expo-router';
-import { AppProvider } from '../../context/AppContext';
-import { ThemeProvider } from '../../theme'; // <--- Importei o ThemeProvider
-import { initDatabase } from '../../database';
+import React from 'react';
+import { Stack } from 'expo-router';
+import { useTheme } from '../../theme';
 
-export default function RootLayout() {
-  useEffect(() => {
-    initDatabase();
-  }, []);
+export default function SettingsLayout() {
+  const { theme } = useTheme();
 
   return (
-    <AppProvider>
-      {/* O ThemeProvider deve estar DENTRO do AppProvider se precisar de dados do usuário, 
-          mas pode estar fora se for independente. Aqui funciona bem. */}
-      <ThemeProvider>
-        <Slot />
-      </ThemeProvider>
-    </AppProvider>
+    <Stack
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: theme.card,
+        },
+        headerTintColor: theme.text,
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+        headerBackTitleVisible: false,
+        headerShadowVisible: false,
+      }}
+    >
+        <Stack.Screen name="edit-name" options={{ title: 'Alterar Nome' }} />
+        <Stack.Screen name="customize-theme" options={{ title: 'Personalizar Tema' }} />
+        <Stack.Screen name="manage-habits" options={{ title: 'Gerir Hábitos' }} />
+        <Stack.Screen name="manage-metrics" options={{ title: 'Gerir Métricas' }} />
+    </Stack>
   );
 }
