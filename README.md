@@ -52,8 +52,8 @@ Para rodar este projeto localmente, siga os passos abaixo.
 
 1. **Clone o repositório:**
    ```sh
-   git clone <URL_DO_SEU_REPOSITORIO>
-   cd <NOME_DA_PASTA_DO_PROJETO>
+   git clone https://github.com/PedroVNeves/Planner
+   cd Planner
    ```
 
 2. **Instale as dependências:**
