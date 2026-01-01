@@ -25,6 +25,8 @@ export const initDatabase = async () => {
       CREATE TABLE IF NOT EXISTS habit_templates (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
+        color TEXT,
+        frequency TEXT,
         archived INTEGER DEFAULT 0,
         createdAt TEXT
       );
@@ -39,6 +41,7 @@ export const initDatabase = async () => {
         id TEXT PRIMARY KEY,
         description TEXT NOT NULL,
         type TEXT NOT NULL,
+        period TEXT,
         completed INTEGER DEFAULT 0,
         createdAt TEXT
       );
@@ -101,6 +104,25 @@ export const initDatabase = async () => {
           ALTER TABLE daily_logs_temp RENAME TO daily_logs;
         `);
       }
+
+      // Migration for goals.period
+      const goalsInfo = await db.getAllAsync('PRAGMA table_info(goals)');
+      const periodColumnExists = goalsInfo.some((column: any) => column.name === 'period');
+      if (!periodColumnExists) {
+        await db.execAsync('ALTER TABLE goals ADD COLUMN period TEXT');
+      }
+
+      // Migration for habits
+      const habitsInfo = await db.getAllAsync('PRAGMA table_info(habit_templates)');
+      const colorColumnExists = habitsInfo.some((column: any) => column.name === 'color');
+      const frequencyColumnExists = habitsInfo.some((column: any) => column.name === 'frequency');
+      if (!colorColumnExists) {
+        await db.execAsync("ALTER TABLE habit_templates ADD COLUMN color TEXT DEFAULT '#8B5CF6'");
+      }
+      if (!frequencyColumnExists) {
+        await db.execAsync("ALTER TABLE habit_templates ADD COLUMN frequency TEXT DEFAULT '[0,1,2,3,4,5,6]'");
+      }
+
     } catch (e) {
       console.warn("Migration for daily_logs failed, proceeding with current schema:", e);
     }

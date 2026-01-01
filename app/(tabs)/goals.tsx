@@ -1,234 +1,124 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  Keyboard
-} from 'react-native';
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
-import * as Crypto from 'expo-crypto';
+import { Feather } from '@expo/vector-icons';
+import { useTheme } from '../../theme';
+import { getGoalCountsForYear, getGoalsByPeriod, addGoal, toggleGoalCompletion, deleteGoal, Goal } from '../../database/goals';
 
-// --- IMPORTAÇÕES ---
-import { useTheme } from '../../theme'; 
-import { getDB } from '../../database'; 
-import LoadingScreen from '../../components/LoadingScreen'; 
-
-type GoalType = 'YEAR' | 'MONTH' | 'WEEK';
-const goalTypes: Record<GoalType, string> = { YEAR: 'Ano', MONTH: 'Mês', WEEK: 'Semana' };
+import MonthGrid from '../../components/goals/MonthGrid';
+import WeekGrid from '../../components/goals/WeekGrid';
+import YearView from '../../components/goals/YearView';
+import GoalListModal from '../../components/goals/GoalListModal';
+import { getWeek } from 'date-fns';
 
 const GoalsScreen = () => {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+
+  const [viewMode, setViewMode] = useState<'MONTHS' | 'WEEKS' | 'YEAR'>('MONTHS');
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [goalCounts, setGoalCounts] = useState<Record<string, { total: number, completed: number }>>({});
+  const [yearGoals, setYearGoals] = useState<Goal[]>([]);
   
-  // Estados Locais
-  const [goals, setGoals] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [writing, setWriting] = useState(false);
-  
-  // Estados do Formulário
-  const [newDescription, setNewDescription] = useState('');
-  const [newType, setNewType] = useState<GoalType>('MONTH');
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState('');
+  const [selectedType, setSelectedType] = useState<'YEAR' | 'MONTH' | 'WEEK'>('MONTH');
+  const [modalTitle, setModalTitle] = useState('');
 
-  // =================================================================
-  // 🛡️ ESTILOS BLINDADOS
-  // =================================================================
-  const styles = useMemo(() => {
-    const c = theme || { 
-        background: '#FFFFFF', 
-        card: '#F5F5F5', 
-        text: '#000000', 
-        textSecondary: '#666666', 
-        primary: '#6200EE', 
-        accent: '#03DAC6',
-        border: '#E0E0E0'
-    } as any;
+  const loadData = useCallback(async () => {
+    const counts = await getGoalCountsForYear(currentYear.toString());
+    setGoalCounts(counts);
 
-    return StyleSheet.create({
-        pageContainer: { flex: 1, padding: 16, backgroundColor: c.background },
-        pageTitle: { fontSize: 28, fontWeight: 'bold', color: c.text, marginBottom: 20 },
-        
-        // Formulário
-        formContainer: { backgroundColor: c.card, padding: 16, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: c.border },
-        formTitle: { fontSize: 20, fontWeight: '600', color: c.primary, marginBottom: 12 },
-        
-        // Inputs e Botões
-        input: { backgroundColor: c.background, color: c.text, borderColor: c.border, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, marginBottom: 12 },
-        button: { backgroundColor: c.primary, padding: 12, borderRadius: 8, alignItems: 'center' },
-        buttonDisabled: { backgroundColor: c.primary, opacity: 0.6 },
-        buttonText: { color: c.card, fontSize: 16, fontWeight: '600' },
-        
-        // Seletor de Tipo
-        typeSelector: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-        typeButton: { flex: 1, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: c.primary, alignItems: 'center', marginHorizontal: 4 },
-        typeButtonSelected: { backgroundColor: c.primary },
-        typeButtonText: { color: c.primary, fontWeight: '600' },
-        typeButtonTextSelected: { color: c.card, fontWeight: '600' },
-        
-        // Listas
-        goalSection: { marginBottom: 20 },
-        goalSectionTitle: { fontSize: 22, fontWeight: 'bold', color: c.primary, borderBottomColor: c.border, borderBottomWidth: 2, paddingBottom: 4, marginBottom: 12 },
-        taskItem: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: c.card, borderRadius: 8, borderWidth: 1, borderColor: c.border, marginBottom: 8 },
-        taskItemCompleted: { backgroundColor: c.accent ? c.accent + '15' : '#e6fffa' },
-        taskText: { flex: 1, marginLeft: 12, fontSize: 16, color: c.text },
-        taskTextCompleted: { textDecorationLine: 'line-through', color: c.textSecondary },
-        
-        emptyText: { fontSize: 14, color: c.textSecondary, fontStyle: 'italic', marginTop: 8 },
-    });
-  }, [theme]);
+    const yGoals = await getGoalsByPeriod(currentYear.toString());
+    setYearGoals(yGoals);
+  }, [currentYear]);
 
-  // --- LER METAS ---
-  const loadGoals = useCallback(async () => {
-    try {
-        const db = getDB();
-        const result = await db.getAllAsync('SELECT * FROM goals ORDER BY createdAt DESC');
-        setGoals(result);
-    } catch (e) { 
-        console.error("Erro ao carregar metas:", e); 
-    } finally { 
-        setLoading(false); 
-    }
-  }, []);
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
-  useFocusEffect(useCallback(() => { loadGoals(); }, [loadGoals]));
-
-  // --- ADICIONAR META ---
-  const handleAddGoal = async () => {
-    if (!newDescription.trim()) return;
+  const handleMonthPress = (period: string) => {
+    const [, month] = period.split('-');
+    const monthName = new Date(currentYear, parseInt(month) - 1).toLocaleString('pt-BR', { month: 'long' });
     
-    setWriting(true);
-    try {
-      const db = getDB();
-      const id = Crypto.randomUUID();
-      const now = new Date().toISOString();
-      
-      await db.runAsync(
-        'INSERT INTO goals (id, description, type, completed, createdAt) VALUES (?, ?, ?, ?, ?)', 
-        [id, newDescription.trim(), newType, 0, now]
-      );
-      
-      setNewDescription('');
-      Keyboard.dismiss();
-      await loadGoals();
-      
-    } catch (e) { 
-        console.error("Erro ao adicionar meta:", e); 
-    } finally { 
-        setWriting(false); 
-    }
+    setSelectedPeriod(period);
+    setSelectedType('MONTH');
+    setModalTitle(`Metas de ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`);
+    setModalVisible(true);
   };
 
-  // --- ALTERAR STATUS ---
-  const handleToggleGoal = async (goal: any) => {
-    try {
-        const db = getDB();
-        const newStatus = goal.completed ? 0 : 1;
-        await db.runAsync('UPDATE goals SET completed = ? WHERE id = ?', [newStatus, goal.id]);
-        await loadGoals();
-    } catch (e) { console.error("Erro ao atualizar meta:", e); }
-  };
-  
-  // --- DELETAR META ---
-  const handleDeleteGoal = async (goalId: string) => {
-    try {
-        const db = getDB();
-        await db.runAsync('DELETE FROM goals WHERE id = ?', [goalId]);
-        await loadGoals();
-    } catch (e) { console.error("Erro ao deletar meta:", e); }
+  const handleWeekPress = (period: string) => {
+    const weekNum = period.split('-W')[1];
+    setSelectedPeriod(period);
+    setSelectedType('WEEK');
+    setModalTitle(`Metas da Semana ${weekNum}`);
+    setModalVisible(true);
   };
 
-  if (loading || !theme) {
-    const safeTheme = theme || { background: '#fff', primary: '#333' } as any;
-    return <LoadingScreen message="A carregar metas..." theme={safeTheme} />;
+  const handleYearGoalAdd = () => {
+      setSelectedPeriod(currentYear.toString());
+      setSelectedType('YEAR');
+      setModalTitle(`Metas de ${currentYear}`);
+      setModalVisible(true);
   }
 
-  return (
-    <ScrollView 
-      style={styles.pageContainer} 
-      contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }}
-      keyboardShouldPersistTaps="handled"
-    >
-      <Text style={styles.pageTitle}>Minhas Metas</Text>
+  const styles = useMemo(() => {
+      const c = theme || { background: '#fff', card: '#eee', text: '#000', primary: '#333' } as any;
+      return StyleSheet.create({
+          container: { flex: 1, backgroundColor: c.background },
+          header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 16 },
+          title: { fontSize: 28, fontWeight: 'bold', color: c.text },
+          yearSelector: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+          yearText: { fontSize: 20, fontWeight: '600', color: c.primary },
+          tabContainer: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 20 },
+          tab: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: c.border },
+          tabActive: { backgroundColor: c.primary, borderColor: c.primary },
+          tabText: { color: c.textSecondary, fontWeight: '600' },
+          tabTextActive: { color: '#fff' },
+          content: { paddingHorizontal: 16, paddingBottom: 100 }
+      });
+  }, [theme]);
 
-      <View style={styles.formContainer}>
-        <Text style={styles.formTitle}>Nova Meta</Text>
-        
-        <View style={styles.typeSelector}>
-          {(Object.keys(goalTypes) as GoalType[]).map((key) => (
-            <TouchableOpacity 
-              key={key} 
-              style={[styles.typeButton, newType === key && styles.typeButtonSelected]} 
-              onPress={() => setNewType(key)}
-            >
-              <Text style={newType === key ? styles.typeButtonTextSelected : styles.typeButtonText}>
-                {goalTypes[key]}
-              </Text>
+  return (
+    <View style={[styles.container, { paddingTop: insets.top + 16 }]}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Metas</Text>
+        <View style={styles.yearSelector}>
+            <TouchableOpacity onPress={() => setCurrentYear(y => y - 1)}>
+                <Feather name="chevron-left" size={24} color={theme.text} />
             </TouchableOpacity>
-          ))}
+            <Text style={styles.yearText}>{currentYear}</Text>
+            <TouchableOpacity onPress={() => setCurrentYear(y => y + 1)}>
+                <Feather name="chevron-right" size={24} color={theme.text} />
+            </TouchableOpacity>
         </View>
-        
-        <TextInput 
-          style={styles.input} 
-          value={newDescription} 
-          onChangeText={setNewDescription} 
-          placeholder="Descreva sua meta..." 
-          editable={!writing} 
-          placeholderTextColor={theme.textSecondary} 
-        />
-        
-        <TouchableOpacity 
-          style={[styles.button, writing ? styles.buttonDisabled : {}]} 
-          onPress={handleAddGoal} 
-          disabled={writing}
-        >
-          {writing ? (
-            <ActivityIndicator color={theme.card} />
-          ) : (
-            <Text style={styles.buttonText}>Adicionar Meta</Text>
-          )}
-        </TouchableOpacity>
       </View>
 
-      {/* Listas por Tipo */}
-      {(Object.keys(goalTypes) as GoalType[]).map(typeKey => {
-        const filteredGoals = goals.filter(g => g.type === typeKey);
-        
-        return (
-          <View key={typeKey} style={styles.goalSection}>
-            <Text style={styles.goalSectionTitle}>{goalTypes[typeKey]} ({filteredGoals.length})</Text>
-            
-            {filteredGoals.length > 0 ? (
-              filteredGoals.map(goal => (
-                <View key={goal.id} style={[styles.taskItem, !!goal.completed && styles.taskItemCompleted]}>
-                  <TouchableOpacity onPress={() => handleToggleGoal(goal)} disabled={writing}>
-                    <Feather 
-                      name={!!goal.completed ? "check-circle" : "circle"} 
-                      size={24} 
-                      color={!!goal.completed ? theme.accent : theme.textSecondary} 
-                    />
-                  </TouchableOpacity>
-                  
-                  <Text style={[styles.taskText, !!goal.completed && styles.taskTextCompleted]}>
-                    {goal.description}
-                  </Text>
-                  
-                  <TouchableOpacity onPress={() => handleDeleteGoal(goal.id)} disabled={writing}>
-                    <Feather name="trash-2" size={20} color="#ef4444" />
-                  </TouchableOpacity>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.emptyText}>Nenhuma meta de {goalTypes[typeKey]}.</Text>
-            )}
-          </View>
-        );
-      })}
-    </ScrollView>
+      <View style={styles.tabContainer}>
+        {(['MONTHS', 'WEEKS', 'YEAR'] as const).map(tab => (
+            <TouchableOpacity key={tab} style={[styles.tab, viewMode === tab && styles.tabActive]} onPress={() => setViewMode(tab)}>
+                <Text style={[styles.tabText, viewMode === tab && styles.tabTextActive]}>
+                    {tab === 'MONTHS' ? 'Mensal' : tab === 'WEEKS' ? 'Semanal' : 'Anual'}
+                </Text>
+            </TouchableOpacity>
+        ))}
+      </View>
+
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {viewMode === 'MONTHS' && (<MonthGrid year={currentYear} onMonthPress={handleMonthPress} goalCounts={goalCounts} />)}
+        {viewMode === 'WEEKS' && (<WeekGrid year={currentYear} onWeekPress={handleWeekPress} goalCounts={goalCounts} />)}
+        {viewMode === 'YEAR' && (
+            <YearView 
+                goals={yearGoals} 
+                onAddGoal={handleYearGoalAdd}
+                onToggleGoal={async (id, status) => { await toggleGoalCompletion(id, !status); loadData(); }}
+                onDeleteGoal={async (id) => { await deleteGoal(id); loadData(); }}
+            />
+        )}
+      </ScrollView>
+
+      <GoalListModal visible={modalVisible} onClose={() => setModalVisible(false)} period={selectedPeriod} type={selectedType} title={modalTitle} onUpdate={loadData} />
+    </View>
   );
 };
 
